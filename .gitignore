@@ -22,6 +22,12 @@ frontend/build/
 # SQLite / App data
 db_query/
 
+# Logs and PID files
+logs/
+*.pid
+.backend.pid
+.frontend.pid
+
 # Environment
 .env
 .env.*
