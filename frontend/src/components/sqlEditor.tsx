@@ -3,9 +3,13 @@
  * Monaco Editor wrapper with SQL language support
  */
 
-import { useRef } from 'react';
+import { useRef, useImperativeHandle, forwardRef } from 'react';
 import Editor from '@monaco-editor/react';
 import type * as Monaco from 'monaco-editor';
+
+export interface SqlEditorHandle {
+  insertText: (text: string) => void;
+}
 
 interface SqlEditorProps {
   value: string;
@@ -15,14 +19,25 @@ interface SqlEditorProps {
   readOnly?: boolean;
 }
 
-export function SqlEditor({
-  value,
-  onChange,
-  onExecute,
-  height = 200,
-  readOnly = false,
-}: SqlEditorProps) {
+export const SqlEditor = forwardRef<SqlEditorHandle, SqlEditorProps>(function SqlEditor(
+  { value, onChange, onExecute, height = 200, readOnly = false },
+  ref,
+) {
   const editorRef = useRef<Monaco.editor.IStandaloneCodeEditor | null>(null);
+
+  useImperativeHandle(ref, () => ({
+    insertText(text: string) {
+      const editor = editorRef.current;
+      if (!editor) return;
+      editor.focus();
+      const selection = editor.getSelection();
+      if (selection) {
+        editor.executeEdits('schema-insert', [
+          { range: selection, text, forceMoveMarkers: true },
+        ]);
+      }
+    },
+  }));
 
   const handleEditorMount = (
     editorInstance: Monaco.editor.IStandaloneCodeEditor,
@@ -76,6 +91,6 @@ export function SqlEditor({
       }}
     />
   );
-}
+});
 
 export default SqlEditor;
