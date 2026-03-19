@@ -1,6 +1,7 @@
 """SQL generation service using LLM."""
 
 import os
+import re
 
 from openai import AsyncOpenAI
 
@@ -180,16 +181,29 @@ After the SQL, on a new line starting with "EXPLANATION:", provide a brief one-s
 
     content = response.choices[0].message.content or ""
 
-    # Parse response
+    # Parse response - handle multiple formats
     parts = content.split("EXPLANATION:")
     rawSql = parts[0].strip()
     explanation = parts[1].strip() if len(parts) > 1 else "Generated SQL query"
 
-    # Remove markdown code blocks if present
-    if rawSql.startswith("```"):
-        lines = rawSql.split("\n")
-        # Remove first line (```sql or ```) and last line (```)
-        rawSql = "\n".join(lines[1:-1] if lines[-1] == "```" else lines[1:])
+    # Remove markdown code blocks if present (handle various formats)
+    if "```" in rawSql:
+        # Find content between ``` markers
+        codeBlockMatch = re.search(r"```(?:sql)?\s*([\s\S]*?)\s*```", rawSql)
+        if codeBlockMatch:
+            rawSql = codeBlockMatch.group(1).strip()
+        else:
+            # Fallback: remove lines starting with ```
+            lines = [l for l in rawSql.split("\n") if not l.strip().startswith("```")]
+            rawSql = "\n".join(lines).strip()
+
+    # Clean up the SQL
+    rawSql = rawSql.strip()
+
+    if not rawSql:
+        raise ValueError(
+            f"LLM returned empty SQL. Raw response: {content[:500]}"
+        )
 
     # Validate generated SQL
     try:

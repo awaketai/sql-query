@@ -32,6 +32,13 @@ def validateAndPrepare(sql: str, dialect: str) -> tuple[str, bool]:
 
     statement = parsed[0]
 
+    # Check if parsing resulted in None (unparseable SQL)
+    if statement is None:
+        raise ValueError(
+            f"Failed to parse SQL. This may be due to unsupported syntax. "
+            f"SQL preview: {sql[:100]}..."
+        )
+
     # Reject non-SELECT statements
     if not isinstance(statement, exp.Select):
         stmtType = type(statement).__name__
