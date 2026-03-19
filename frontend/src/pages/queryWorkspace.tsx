@@ -10,7 +10,6 @@ import {
   Button,
   Card,
   Alert,
-  message,
   Space,
   Tabs,
   Input,
@@ -27,6 +26,8 @@ import {
 import type { DatabaseConnection, QueryResponse } from '../types';
 import { SqlEditor } from '../components/sqlEditor';
 import { ResultTable } from '../components/resultTable';
+import { api, getErrorMessage } from '../api';
+import { msg } from '../message';
 
 const { TextArea } = Input;
 const { Text } = Typography;
@@ -50,21 +51,18 @@ export function QueryWorkspace() {
   }, []);
 
   const fetchConnections = async () => {
-    try {
-      const response = await fetch('/api/connections');
-      const data = await response.json();
+    const data = await api.call(() => api.connections.list(), 'Failed to fetch connections');
+    if (data) {
       setConnections(data);
       if (data.length > 0 && !selectedConnection) {
         setSelectedConnection(data[0].id);
       }
-    } catch (error) {
-      message.error('Failed to fetch connections');
     }
   };
 
   const handleGenerateSql = async () => {
     if (!selectedConnection || !naturalLanguage.trim()) {
-      message.warning('Please select a connection and describe your query');
+      msg.warning('Please select a connection and describe your query');
       return;
     }
 
@@ -73,29 +71,15 @@ export function QueryWorkspace() {
     setGeneratedExplanation(null);
 
     try {
-      const response = await fetch(
-        `/api/connections/${selectedConnection}/generate-sql`,
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ naturalLanguage }),
-        }
-      );
-
-      const data = await response.json();
-
-      if (!response.ok) {
-        throw new Error(data.detail || 'SQL generation failed');
-      }
-
+      const data = await api.generation.generateSql(selectedConnection, naturalLanguage);
       setSql(data.generatedSql);
       setGeneratedExplanation(data.explanation);
-      setQueryMode('sql'); // Switch to SQL mode to show generated query
-      message.success('SQL generated successfully');
+      setQueryMode('sql');
+      msg.success('SQL generated successfully');
     } catch (err) {
-      const errorMsg = err instanceof Error ? err.message : 'SQL generation failed';
+      const errorMsg = getErrorMessage(err, 'SQL generation failed');
       setError(errorMsg);
-      message.error(errorMsg);
+      msg.error(errorMsg);
     } finally {
       setGenerating(false);
     }
@@ -103,7 +87,7 @@ export function QueryWorkspace() {
 
   const handleExecute = async () => {
     if (!selectedConnection || !sql.trim()) {
-      message.warning('Please select a connection and enter a query');
+      msg.warning('Please select a connection and enter a query');
       return;
     }
 
@@ -112,21 +96,13 @@ export function QueryWorkspace() {
     setResult(null);
 
     try {
-      const response = await fetch(`/api/connections/${selectedConnection}/query`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ sql, source: queryMode === 'natural' ? 'llmGenerated' : 'manual' }),
+      const data = await api.queries.execute(selectedConnection, {
+        sql,
+        source: queryMode === 'natural' ? 'llmGenerated' : 'manual',
       });
-
-      const data = await response.json();
-
-      if (!response.ok) {
-        throw new Error(data.detail || 'Query execution failed');
-      }
-
       setResult(data);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Query execution failed');
+      setError(getErrorMessage(err, 'Query execution failed'));
     } finally {
       setLoading(false);
     }

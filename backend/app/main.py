@@ -6,6 +6,12 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 
 from dotenv import load_dotenv
+
+# Load .env file FIRST, before any other imports
+envPath = Path(__file__).parent.parent / ".env"
+if envPath.exists():
+    load_dotenv(envPath)
+
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
@@ -13,11 +19,6 @@ from fastapi.responses import JSONResponse
 from app.api import connections, generation, metadata, queries
 from app.db.sqlite import initDb
 from app.models.common import ErrorType
-
-# Load .env file from project root
-envPath = Path(__file__).parent.parent / ".env"
-if envPath.exists():
-    load_dotenv(envPath)
 
 
 @asynccontextmanager

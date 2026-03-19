@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { BrowserRouter, Routes, Route, Outlet, Navigate, useLocation } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Outlet, Navigate, useLocation, useNavigate } from 'react-router-dom';
 import { ConfigProvider, Layout, Menu, Tag, Badge, App as AntApp } from 'antd';
 import {
   DatabaseOutlined,
@@ -8,12 +8,24 @@ import {
   CloseCircleOutlined,
 } from '@ant-design/icons';
 
+import { App as AntAppHook } from 'antd';
 import { ConnectionList } from './pages/connectionList';
 import { DatabaseExplorer } from './pages/databaseExplorer';
 import { QueryWorkspace } from './pages/queryWorkspace';
 import type { DatabaseConnection } from './types';
+import { api } from './api';
+import { setupMessage } from './message';
 
 const { Sider, Content, Header } = Layout;
+
+/** Injects antd's context-aware message API into our global holder. */
+function MessageSetup() {
+  const { message } = AntAppHook.useApp();
+  useEffect(() => {
+    setupMessage(message);
+  }, [message]);
+  return null;
+}
 
 function ConnectionStatusIndicator() {
   const [connections, setConnections] = useState<DatabaseConnection[]>([]);
@@ -25,8 +37,7 @@ function ConnectionStatusIndicator() {
 
   const fetchConnections = async () => {
     try {
-      const response = await fetch('/api/connections');
-      const data = await response.json();
+      const data = await api.connections.list();
       setConnections(data);
     } catch {
       // Ignore errors for status indicator
@@ -53,6 +64,7 @@ function ConnectionStatusIndicator() {
 
 function AppLayout() {
   const location = useLocation();
+  const navigate = useNavigate();
 
   const getSelectedKey = () => {
     if (location.pathname.startsWith('/explorer')) return 'explorer';
@@ -100,7 +112,7 @@ function AppLayout() {
               explorer: '/explorer',
               query: '/query',
             };
-            window.location.pathname = paths[key] || '/';
+            navigate(paths[key] || '/');
           }}
         />
       </Sider>
@@ -129,6 +141,7 @@ function App() {
   return (
     <ConfigProvider>
       <AntApp>
+        <MessageSetup />
         <BrowserRouter>
           <Routes>
             <Route element={<AppLayout />}>

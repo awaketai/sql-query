@@ -4,6 +4,7 @@
  */
 
 import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
   Table,
   Button,
@@ -13,7 +14,6 @@ import {
   Select,
   Space,
   Tag,
-  message,
   Popconfirm,
 } from 'antd';
 import {
@@ -21,16 +21,14 @@ import {
   DeleteOutlined,
   SyncOutlined,
   DatabaseOutlined,
+  TableOutlined,
 } from '@ant-design/icons';
-import type { DatabaseConnection, DbType } from '../types';
-
-interface ConnectionFormData {
-  displayName: string;
-  connectionUrl: string;
-  dbType: DbType;
-}
+import type { DatabaseConnection, CreateConnectionRequest } from '../types';
+import { api, getErrorMessage } from '../api';
+import { msg } from '../message';
 
 export function ConnectionList() {
+  const navigate = useNavigate();
   const [connections, setConnections] = useState<DatabaseConnection[]>([]);
   const [loading, setLoading] = useState(false);
   const [modalOpen, setModalOpen] = useState(false);
@@ -38,74 +36,41 @@ export function ConnectionList() {
 
   const fetchConnections = async () => {
     setLoading(true);
-    try {
-      const response = await fetch('/api/connections');
-      const data = await response.json();
-      setConnections(data);
-    } catch (error) {
-      message.error('Failed to fetch connections');
-    } finally {
-      setLoading(false);
-    }
+    const data = await api.call(() => api.connections.list(), 'Failed to fetch connections');
+    if (data) setConnections(data);
+    setLoading(false);
   };
 
   useEffect(() => {
     fetchConnections();
   }, []);
 
-  const handleCreate = async (values: ConnectionFormData) => {
+  const handleCreate = async (values: CreateConnectionRequest) => {
     try {
-      const response = await fetch('/api/connections', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(values),
-      });
-
-      if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.detail || 'Failed to create connection');
-      }
-
-      message.success('Connection created successfully');
+      await api.connections.create(values);
+      msg.success('Connection created successfully');
       setModalOpen(false);
       form.resetFields();
       fetchConnections();
     } catch (error) {
-      message.error(error instanceof Error ? error.message : 'Failed to create connection');
+      msg.error(getErrorMessage(error, 'Failed to create connection'));
     }
   };
 
   const handleDelete = async (id: number) => {
     try {
-      const response = await fetch(`/api/connections/${id}`, {
-        method: 'DELETE',
-      });
-
-      if (!response.ok) {
-        throw new Error('Failed to delete connection');
-      }
-
-      message.success('Connection deleted');
+      await api.connections.delete(id);
+      msg.success('Connection deleted');
       fetchConnections();
     } catch (error) {
-      message.error('Failed to delete connection');
+      msg.error(getErrorMessage(error, 'Failed to delete connection'));
     }
   };
 
   const handleRefresh = async (id: number) => {
-    try {
-      const response = await fetch(`/api/connections/${id}/refresh`, {
-        method: 'POST',
-      });
-
-      if (!response.ok) {
-        throw new Error('Failed to refresh metadata');
-      }
-
-      const data = await response.json();
-      message.success(`Metadata refreshed: ${data.tablesCount} tables, ${data.viewsCount} views`);
-    } catch (error) {
-      message.error('Failed to refresh metadata');
+    const data = await api.call(() => api.connections.refresh(id), 'Failed to refresh metadata');
+    if (data) {
+      msg.success(`Metadata refreshed: ${data.tablesCount} tables, ${data.viewsCount} views`);
     }
   };
 
@@ -153,6 +118,13 @@ export function ConnectionList() {
       key: 'actions',
       render: (_: unknown, record: DatabaseConnection) => (
         <Space>
+          <Button
+            icon={<TableOutlined />}
+            onClick={() => navigate(`/explorer?connectionId=${record.id}`)}
+            size="small"
+          >
+            Explore
+          </Button>
           <Button
             icon={<SyncOutlined />}
             onClick={() => handleRefresh(record.id)}

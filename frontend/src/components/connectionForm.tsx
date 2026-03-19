@@ -3,14 +3,10 @@
  * Form for creating new database connections
  */
 
-import { Form, Input, Select, message } from 'antd';
-import type { DbType } from '../types';
-
-interface ConnectionFormData {
-  displayName: string;
-  connectionUrl: string;
-  dbType: DbType;
-}
+import { Form, Input, Select } from 'antd';
+import type { CreateConnectionRequest } from '../types';
+import { api, getErrorMessage } from '../api';
+import { msg } from '../message';
 
 interface ConnectionFormProps {
   onSuccess: () => void;
@@ -20,24 +16,14 @@ interface ConnectionFormProps {
 export function ConnectionForm({ onSuccess, onCancel }: ConnectionFormProps) {
   const [form] = Form.useForm();
 
-  const handleSubmit = async (values: ConnectionFormData) => {
+  const handleSubmit = async (values: CreateConnectionRequest) => {
     try {
-      const response = await fetch('/api/connections', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(values),
-      });
-
-      if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.detail || 'Failed to create connection');
-      }
-
-      message.success('Connection created successfully');
+      await api.connections.create(values);
+      msg.success('Connection created successfully');
       form.resetFields();
       onSuccess();
     } catch (error) {
-      message.error(error instanceof Error ? error.message : 'Failed to create connection');
+      msg.error(getErrorMessage(error, 'Failed to create connection'));
     }
   };
 

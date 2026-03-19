@@ -4,6 +4,7 @@
  */
 
 import { useState, useEffect } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import {
   Select,
   Tree,
@@ -11,7 +12,6 @@ import {
   Tag,
   Empty,
   Spin,
-  message,
   Button,
 } from 'antd';
 import {
@@ -21,6 +21,8 @@ import {
   ReloadOutlined,
 } from '@ant-design/icons';
 import type { DatabaseConnection, TableListItem, TableDetail } from '../types';
+import { api } from '../api';
+import { msg } from '../message';
 
 interface TreeNode {
   key: string;
@@ -29,6 +31,7 @@ interface TreeNode {
 }
 
 export function DatabaseExplorer() {
+  const [searchParams] = useSearchParams();
   const [connections, setConnections] = useState<DatabaseConnection[]>([]);
   const [selectedConnection, setSelectedConnection] = useState<number | null>(null);
   const [tables, setTables] = useState<TableListItem[]>([]);
@@ -41,15 +44,18 @@ export function DatabaseExplorer() {
   }, []);
 
   const fetchConnections = async () => {
-    try {
-      const response = await fetch('/api/connections');
-      const data = await response.json();
+    const data = await api.call(() => api.connections.list(), 'Failed to fetch connections');
+    if (data) {
       setConnections(data);
-      if (data.length > 0 && !selectedConnection) {
-        setSelectedConnection(data[0].id);
+      if (!selectedConnection) {
+        const paramId = searchParams.get('connectionId');
+        const initialId = paramId ? Number(paramId) : data[0]?.id;
+        if (initialId && data.some((c) => c.id === initialId)) {
+          setSelectedConnection(initialId);
+        } else if (data.length > 0) {
+          setSelectedConnection(data[0].id);
+        }
       }
-    } catch (error) {
-      message.error('Failed to fetch connections');
     }
   };
 
@@ -61,46 +67,33 @@ export function DatabaseExplorer() {
 
   const fetchTables = async (connectionId: number) => {
     setLoading(true);
-    try {
-      const response = await fetch(`/api/connections/${connectionId}/tables`);
-      const data = await response.json();
-      setTables(data);
-    } catch (error) {
-      message.error('Failed to fetch tables');
-    } finally {
-      setLoading(false);
-    }
+    const data = await api.call(() => api.tables.list(connectionId), 'Failed to fetch tables');
+    setTables(data ?? []);
+    setLoading(false);
   };
 
   const fetchTableDetail = async (tableId: number) => {
     if (!selectedConnection) return;
 
     setTableLoading(true);
-    try {
-      const response = await fetch(
-        `/api/connections/${selectedConnection}/tables/${tableId}`
-      );
-      const data = await response.json();
-      setSelectedTable(data);
-    } catch (error) {
-      message.error('Failed to fetch table details');
-    } finally {
-      setTableLoading(false);
-    }
+    const data = await api.call(
+      () => api.tables.get(selectedConnection, tableId),
+      'Failed to fetch table details',
+    );
+    if (data) setSelectedTable(data);
+    setTableLoading(false);
   };
 
   const handleRefresh = async () => {
     if (!selectedConnection) return;
 
-    try {
-      const response = await fetch(`/api/connections/${selectedConnection}/refresh`, {
-        method: 'POST',
-      });
-      const data = await response.json();
-      message.success(`Refreshed: ${data.tablesCount} tables, ${data.viewsCount} views`);
+    const data = await api.call(
+      () => api.connections.refresh(selectedConnection),
+      'Failed to refresh metadata',
+    );
+    if (data) {
+      msg.success(`Refreshed: ${data.tablesCount} tables, ${data.viewsCount} views`);
       fetchTables(selectedConnection);
-    } catch (error) {
-      message.error('Failed to refresh metadata');
     }
   };
 
