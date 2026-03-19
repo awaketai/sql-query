@@ -4,7 +4,7 @@
  */
 
 // Database types
-export type DbType = 'mysql'; // Extensible for future: 'postgresql' | 'sqlite'
+export type DbType = 'mysql' | 'postgresql'; // Extensible for future: 'sqlite'
 
 export type ConnectionStatus = 'active' | 'inactive' | 'error';
 

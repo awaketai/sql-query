@@ -1,14 +1,14 @@
 # DB Query Tool
 
-一个基于 Web 的 SQL 查询工具，支持连接 MySQL 数据库、浏览元数据、执行 SQL 查询，以及通过自然语言生成 SQL。
+一个基于 Web 的 SQL 查询工具，支持连接 MySQL / PostgreSQL 数据库、浏览元数据、执行 SQL 查询，以及通过自然语言生成 SQL。
 
 ## 功能特性
 
-- **数据库连接管理** - 添加、管理多个 MySQL 数据库连接
+- **数据库连接管理** - 添加、管理多个 MySQL / PostgreSQL 数据库连接
 - **元数据浏览** - 自动提取并缓存表、视图、列信息
 - **SQL 编辑器** - Monaco 编辑器，支持语法高亮、自动补全
 - **查询执行** - SELECT-only 安全查询，自动添加 LIMIT 限制
-- **自然语言生成 SQL** - 使用 OpenAI GPT-4o 将自然语言转换为 SQL
+- **自然语言生成 SQL** - 使用 LLM 将自然语言转换为 SQL
 - **查询历史** - 记录所有查询执行历史
 
 ## 技术栈
@@ -18,14 +18,17 @@
 - FastAPI
 - sqlglot (SQL 解析与验证)
 - aiomysql (MySQL 异步驱动)
-- OpenAI SDK
+- asyncpg (PostgreSQL 异步驱动)
+- OpenAI SDK (LLM 集成)
+- cryptography (Fernet 对称加密)
+- aiosqlite (本地 SQLite 存储)
 
 **前端:**
 - React 19
 - TypeScript
-- Refine v5 (管理框架)
 - Ant Design
 - Monaco Editor
+- React Router
 - Tailwind CSS
 
 ## 快速开始
@@ -35,7 +38,7 @@
 - Python 3.13+
 - Node.js 18+
 - [uv](https://docs.astral.sh/uv/) (Python 包管理器)
-- MySQL 数据库
+- MySQL 或 PostgreSQL 数据库
 - OpenAI API Key
 
 ### 安装
@@ -66,7 +69,7 @@ npm install
 创建 `.env` 文件 (复制 `.env.example` 并修改):
 
 ```bash
-cp .env.example .env
+cp backend/.env.example backend/.env
 ```
 
 或手动设置环境变量:
@@ -129,6 +132,10 @@ npm run dev
 
 打开浏览器访问: http://localhost:3000
 
+- 前端: http://localhost:3000
+- 后端 API: http://localhost:8000
+- API 文档 (Swagger): http://localhost:8000/docs
+
 ## 使用指南
 
 ### 1. 添加数据库连接
@@ -137,11 +144,12 @@ npm run dev
 2. 点击 **Add Connection** 按钮
 3. 填写连接信息:
    - **Display Name**: 连接名称 (如 "生产环境数据库")
-   - **Connection URL**: MySQL 连接字符串
+   - **Connection URL**: 数据库连接字符串
      ```
      mysql://username:password@host:port/database
+     postgresql://username:password@host:port/database
      ```
-   - **Database Type**: 选择 MySQL
+   - **Database Type**: 选择 MySQL 或 PostgreSQL
 4. 点击 **Connect** 保存连接
 
 连接成功后，系统会自动提取并缓存数据库元数据。
@@ -207,50 +215,54 @@ npm run dev
 sql-query/
 ├── backend/
 │   ├── app/
-│   │   ├── main.py              # FastAPI 应用入口
-│   │   ├── models/              # Pydantic 数据模型
-│   │   │   ├── common.py        # 公共类型和枚举
-│   │   │   ├── connection.py    # 连接相关模型
-│   │   │   ├── metadata.py      # 元数据模型
-│   │   │   └── query.py         # 查询模型
-│   │   ├── services/            # 业务逻辑服务
-│   │   │   ├── databaseDriver.py    # 数据库驱动协议
-│   │   │   ├── connectionManager.py # 连接管理
-│   │   │   ├── queryValidator.py    # SQL 验证
-│   │   │   ├── queryExecutor.py     # 查询执行
-│   │   │   ├── sqlGenerator.py      # LLM SQL 生成
-│   │   │   ├── encryption.py        # 加密服务
-│   │   │   └── drivers/             # 数据库驱动实现
-│   │   │       └── mysqlDriver.py
-│   │   ├── api/                 # API 路由
-│   │   │   ├── connections.py
-│   │   │   ├── metadata.py
-│   │   │   ├── queries.py
-│   │   │   └── generation.py
+│   │   ├── main.py                    # FastAPI 应用入口
+│   │   ├── models/                    # Pydantic 数据模型
+│   │   │   ├── common.py             # 公共类型和枚举
+│   │   │   ├── connection.py         # 连接相关模型
+│   │   │   ├── metadata.py           # 元数据模型
+│   │   │   └── query.py              # 查询模型
+│   │   ├── services/                  # 业务逻辑服务
+│   │   │   ├── database_driver.py    # 数据库驱动协议
+│   │   │   ├── connection_manager.py # 连接管理
+│   │   │   ├── query_validator.py    # SQL 验证
+│   │   │   ├── query_executor.py     # 查询执行
+│   │   │   ├── sql_generator.py      # LLM SQL 生成
+│   │   │   ├── encryption.py         # 加密服务
+│   │   │   └── drivers/              # 数据库驱动实现
+│   │   │       ├── mysql_driver.py   # MySQL 驱动
+│   │   │       └── postgres_driver.py # PostgreSQL 驱动
+│   │   ├── api/                       # API 路由
+│   │   │   ├── connections.py        # 连接管理接口
+│   │   │   ├── metadata.py           # 元数据接口
+│   │   │   ├── queries.py            # 查询执行接口
+│   │   │   └── generation.py         # SQL 生成接口
 │   │   └── db/
-│   │       └── sqlite.py        # SQLite 数据库
+│   │       └── sqlite.py             # SQLite 本地数据库
 │   ├── pyproject.toml
+│   ├── .env.example
 │   └── tests/
 │
 ├── frontend/
 │   ├── src/
-│   │   ├── App.tsx              # 应用主入口
-│   │   ├── types/               # TypeScript 类型定义
-│   │   ├── providers/           # Refine 数据提供者
-│   │   ├── components/          # 可复用组件
-│   │   │   ├── connectionForm.tsx
-│   │   │   ├── metadataBrowser.tsx
-│   │   │   ├── sqlEditor.tsx
-│   │   │   └── resultTable.tsx
-│   │   └── pages/               # 页面组件
-│   │       ├── connectionList.tsx
-│   │       ├── databaseExplorer.tsx
-│   │       └── queryWorkspace.tsx
+│   │   ├── App.tsx                    # 应用主入口 (路由配置)
+│   │   ├── main.tsx                   # React 挂载入口
+│   │   ├── api.ts                     # 后端 API 客户端
+│   │   ├── message.ts                 # 消息通知工具
+│   │   ├── types/index.ts             # TypeScript 类型定义
+│   │   ├── components/                # 可复用组件
+│   │   │   ├── connectionForm.tsx     # 连接表单
+│   │   │   ├── metadataBrowser.tsx    # 元数据树形浏览器
+│   │   │   ├── sqlEditor.tsx          # Monaco SQL 编辑器
+│   │   │   └── resultTable.tsx        # 查询结果表格
+│   │   └── pages/                     # 页面组件
+│   │       ├── connectionList.tsx     # 连接管理页
+│   │       ├── databaseExplorer.tsx   # 数据库浏览页
+│   │       └── queryWorkspace.tsx     # 查询工作区页
 │   ├── package.json
 │   ├── vite.config.ts
 │   └── tailwind.config.js
 │
-├── specs/                       # 功能规格文档
+├── specs/                              # 功能规格文档
 ├── Makefile
 └── README.md
 ```
@@ -280,7 +292,8 @@ sql-query/
 - 数据库连接密码使用 Fernet 对称加密存储
 - 仅支持 SELECT 查询，防止数据修改
 - 自动添加 LIMIT 限制，防止大量数据查询
-- 支持多语句查询拒绝，防止 SQL 注入
+- 多语句查询拒绝，防止 SQL 注入
+- CORS 限制为 localhost 开发环境
 
 ## 开发
 

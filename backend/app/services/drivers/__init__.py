@@ -69,6 +69,15 @@ def _autoRegisterDrivers() -> None:
         # MySQL driver not available (missing dependencies)
         pass
 
+    # Import and register PostgreSQL driver
+    try:
+        from app.services.drivers.postgres_driver import PostgresDriver
+
+        registerDriver("postgresql", PostgresDriver)
+    except ImportError:
+        # PostgreSQL driver not available (missing dependencies)
+        pass
+
 
 # Run auto-registration when module is imported
 _autoRegisterDrivers()

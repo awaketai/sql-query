@@ -10,8 +10,8 @@ class DbType(str, Enum):
     """Supported database types."""
 
     MYSQL = "mysql"
+    POSTGRESQL = "postgresql"
     # Future support:
-    # POSTGRESQL = "postgresql"
     # SQLITE = "sqlite"
 
 

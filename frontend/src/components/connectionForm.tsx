@@ -47,7 +47,7 @@ export function ConnectionForm({ onSuccess, onCancel }: ConnectionFormProps) {
         label="Connection URL"
         rules={[{ required: true, message: 'Please enter a connection URL' }]}
       >
-        <Input.Password placeholder="mysql://user:pass@host:3306/database" />
+        <Input.Password placeholder="mysql://user:pass@host:3306/database or postgresql://user:pass@host:5432/database" />
       </Form.Item>
 
       <Form.Item
@@ -57,6 +57,7 @@ export function ConnectionForm({ onSuccess, onCancel }: ConnectionFormProps) {
       >
         <Select>
           <Select.Option value="mysql">MySQL</Select.Option>
+          <Select.Option value="postgresql">PostgreSQL</Select.Option>
         </Select>
       </Form.Item>
     </Form>
