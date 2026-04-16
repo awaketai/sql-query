@@ -4,7 +4,7 @@
  * Supports manual SQL and natural language generation
  */
 
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import {
   Select,
   Button,
@@ -50,6 +50,19 @@ interface SchemaTreeNode {
   children?: SchemaTreeNode[];
   isLeaf?: boolean;
 }
+
+const getKeyIcon = (keyType: string) => {
+  switch (keyType) {
+    case 'primary':
+      return <Tag color="gold" style={{ fontSize: 10, lineHeight: '16px', padding: '0 4px' }}>PK</Tag>;
+    case 'foreign':
+      return <Tag color="blue" style={{ fontSize: 10, lineHeight: '16px', padding: '0 4px' }}>FK</Tag>;
+    case 'unique':
+      return <Tag color="cyan" style={{ fontSize: 10, lineHeight: '16px', padding: '0 4px' }}>UNQ</Tag>;
+    default:
+      return null;
+  }
+};
 
 export function QueryWorkspace() {
   const [connections, setConnections] = useState<DatabaseConnection[]>([]);
@@ -103,8 +116,12 @@ export function QueryWorkspace() {
     setTablesLoading(false);
   };
 
+  // Use a ref to check tableDetails without adding it as a dependency
+  const tableDetailsRef = useRef(tableDetails);
+  tableDetailsRef.current = tableDetails;
+
   const fetchTableDetail = useCallback(async (tableId: number) => {
-    if (!selectedConnection || tableDetails[tableId]) return;
+    if (!selectedConnection || tableDetailsRef.current[tableId]) return;
     setLoadingTableIds((prev) => new Set(prev).add(tableId));
     const data = await api.call(
       () => api.tables.get(selectedConnection, tableId),
@@ -118,7 +135,7 @@ export function QueryWorkspace() {
       next.delete(tableId);
       return next;
     });
-  }, [selectedConnection, tableDetails]);
+  }, [selectedConnection]);
 
   const insertIntoSql = (text: string) => {
     editorRef.current?.insertText(text);
@@ -149,9 +166,9 @@ export function QueryWorkspace() {
     }
   };
 
-  const handleExecute = async () => {
-    if (!selectedConnection || !sql.trim()) {
-      msg.warning('Please select a connection and enter a query');
+  const handleExecute = useCallback(async () => {
+    if (!selectedConnection) {
+      msg.warning('Please select a connection');
       return;
     }
 
@@ -160,32 +177,43 @@ export function QueryWorkspace() {
     setResult(null);
 
     try {
-      const data = await api.queries.execute(selectedConnection, {
-        sql,
-        source: queryMode === 'natural' ? 'llmGenerated' : 'manual',
-      });
-      setResult(data);
+      // In natural language mode, generate SQL first then execute
+      if (queryMode === 'natural') {
+        if (!naturalLanguage.trim()) {
+          msg.warning('Please describe your query');
+          setLoading(false);
+          return;
+        }
+        const genData = await api.generation.generateSql(selectedConnection, naturalLanguage);
+        setSql(genData.generatedSql);
+        setGeneratedExplanation(genData.explanation);
+        setQueryMode('sql');
+
+        const execData = await api.queries.execute(selectedConnection, {
+          sql: genData.generatedSql,
+          source: 'llmGenerated',
+        });
+        setResult(execData);
+      } else {
+        if (!sql.trim()) {
+          msg.warning('Please enter a query');
+          setLoading(false);
+          return;
+        }
+        const data = await api.queries.execute(selectedConnection, {
+          sql,
+          source: 'manual',
+        });
+        setResult(data);
+      }
     } catch (err) {
-      setError(getErrorMessage(err, 'Query execution failed'));
+      setError(getErrorMessage(err, queryMode === 'natural' ? 'SQL generation failed' : 'Query execution failed'));
     } finally {
       setLoading(false);
     }
-  };
+  }, [selectedConnection, sql, naturalLanguage, queryMode]);
 
-  const getKeyIcon = (keyType: string) => {
-    switch (keyType) {
-      case 'primary':
-        return <Tag color="gold" style={{ fontSize: 10, lineHeight: '16px', padding: '0 4px' }}>PK</Tag>;
-      case 'foreign':
-        return <Tag color="blue" style={{ fontSize: 10, lineHeight: '16px', padding: '0 4px' }}>FK</Tag>;
-      case 'unique':
-        return <Tag color="cyan" style={{ fontSize: 10, lineHeight: '16px', padding: '0 4px' }}>UNQ</Tag>;
-      default:
-        return null;
-    }
-  };
-
-  const buildSchemaTree = (): SchemaTreeNode[] => {
+  const schemaTree = useMemo((): SchemaTreeNode[] => {
     const tableItems = tables.filter((t) => t.type === 'TABLE');
     const viewItems = tables.filter((t) => t.type === 'VIEW');
 
@@ -251,7 +279,7 @@ export function QueryWorkspace() {
       });
     }
     return result;
-  };
+  }, [tables, tableDetails, loadingTableIds]);
 
   const handleTreeExpand = (expandedKeys: React.Key[]) => {
     // Lazy-load column details when a table node is expanded
@@ -263,7 +291,7 @@ export function QueryWorkspace() {
     }
   };
 
-  const tabItems = [
+  const tabItems = useMemo(() => [
     {
       key: 'sql',
       label: (
@@ -318,7 +346,7 @@ export function QueryWorkspace() {
         </div>
       ),
     },
-  ];
+  ], [sql, naturalLanguage, generating, selectedConnection, handleExecute, editorRef]);
 
   return (
     <div>
@@ -386,7 +414,7 @@ export function QueryWorkspace() {
                 Click column name to insert into editor
               </div>
               <Tree
-                treeData={buildSchemaTree()}
+                treeData={schemaTree}
                 defaultExpandedKeys={['tables', 'views']}
                 onExpand={handleTreeExpand}
                 blockNode
@@ -430,7 +458,7 @@ export function QueryWorkspace() {
                 type="primary"
                 icon={loading ? <LoadingOutlined /> : <PlayCircleOutlined />}
                 onClick={handleExecute}
-                disabled={loading || !selectedConnection || !sql.trim()}
+                disabled={loading || !selectedConnection || (queryMode === 'sql' && !sql.trim()) || (queryMode === 'natural' && !naturalLanguage.trim())}
                 size="large"
               >
                 Run Query
