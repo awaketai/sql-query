@@ -1,0 +1,53 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Resolve symlink to get real project directory
+SELF="$(readlink "$0" 2>/dev/null || echo "$0")"
+PROJECT_DIR="$(cd "$(dirname "$SELF")/.." && pwd)"
+RUNTIME_DIR="/tmp/sql-query"
+FRONTEND_URL="http://localhost:3000"
+
+stop() {
+  if [ -f "$RUNTIME_DIR/backend.pid" ]; then
+    kill "$(cat "$RUNTIME_DIR/backend.pid")" 2>/dev/null || true
+  fi
+  if [ -f "$RUNTIME_DIR/frontend.pid" ]; then
+    kill "$(cat "$RUNTIME_DIR/frontend.pid")" 2>/dev/null || true
+  fi
+  pkill -f "uvicorn app.main:app" 2>/dev/null || true
+  pkill -f "vite" 2>/dev/null || true
+}
+
+# Stop existing services
+if pgrep -f "uvicorn app.main:app" >/dev/null 2>&1; then
+  echo "Stopping existing services..."
+  stop
+  sleep 1
+fi
+
+mkdir -p "$RUNTIME_DIR"
+
+# Start backend
+echo "Starting backend..."
+cd "$PROJECT_DIR/backend" && uv run uvicorn app.main:app --port 8000 > "$RUNTIME_DIR/backend.log" 2>&1 &
+echo $! > "$RUNTIME_DIR/backend.pid"
+
+# Start frontend
+echo "Starting frontend..."
+cd "$PROJECT_DIR/frontend" && npm run dev > "$RUNTIME_DIR/frontend.log" 2>&1 &
+echo $! > "$RUNTIME_DIR/frontend.pid"
+
+# Wait for frontend to be ready (up to 15s)
+echo "Waiting for services..."
+for i in $(seq 1 30); do
+  if curl -s -o /dev/null "$FRONTEND_URL" 2>/dev/null; then
+    break
+  fi
+  sleep 0.5
+done
+
+# Open browser
+echo "Opening browser: $FRONTEND_URL"
+open "$FRONTEND_URL"
+echo "Services running. Logs: $RUNTIME_DIR/"
+echo "Run 'sql-query stop' to stop."
